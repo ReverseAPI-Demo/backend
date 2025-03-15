@@ -58,7 +58,7 @@ class CurlGeneratorService:
 
             elif "post_params" in request:
                 for param_name, param_value in request["post_params"].items():
-                    curl_parts += ["-F", f"{param_name}={param_value}"]
+                    curl_parts += ["-F", shlex.quote(f"{param_name}={param_value}")]
 
         curl_parts.append("-L")
 
