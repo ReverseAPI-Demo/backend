@@ -1,4 +1,5 @@
 from fastapi import APIRouter, UploadFile, Depends, Form, Response
+import httpx
 
 from .dependancies import (
     validate_har,
@@ -40,3 +41,22 @@ async def process_har(
     curl_command = curl_generator.generate(matched_request)
 
     return Response(content=curl_command)
+
+
+@app.post("/api/execute-request")
+async def proxy_request(request_data: dict):
+    url = request_data.get("url")
+    method = request_data.get("method", "GET")
+    headers = request_data.get("headers", {})
+    data = request_data.get("data")
+
+    async with httpx.AsyncClient() as client:
+        response = await client.request(
+            method=method, url=url, headers=headers, data=data
+        )
+
+    return Response(
+        content=response.content,
+        status_code=response.status_code,
+        headers=dict(response.headers),
+    )
