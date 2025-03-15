@@ -14,7 +14,6 @@ class CurlGeneratorService:
         so used shlex to un-escape it.
         """
 
-        print(request)
         if not request:
             raise ValueError("No request data provided")
 

@@ -6,6 +6,8 @@ from urllib.parse import urlparse
 
 import openai
 
+from app.core.config import HAR_ANALYSIS_PROMPT
+
 dotenv.load_dotenv()
 
 
@@ -75,19 +77,9 @@ class LLMService:
 
             request_summaries.append(summary)
 
-        prompt = f"""
-        I need to identify the most relevant API request from a HAR file based on this user description:
-        "{description}"
-        
-        Below are the available API requests captured from a web browser session.
-        I need to find the API request that best matches the user's description.
-        Only consider actual API endpoints, not static resources or page loads.
-        
-        Available API requests:
-        {json.dumps(request_summaries, indent=2)}
-        
-        Analyze these requests and return ONLY the ID of the most likely match and no other characters in the output.
-        """
+        prompt = HAR_ANALYSIS_PROMPT.format(
+            description=description, requests=json.dumps(request_summaries, indent=2)
+        )
 
         try:
 
