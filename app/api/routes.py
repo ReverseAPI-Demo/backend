@@ -1,4 +1,5 @@
-from fastapi import APIRouter, UploadFile, Depends, Form, Response
+import json
+from fastapi import APIRouter, UploadFile, Depends, Form, Response, HTTPException
 import httpx
 
 from .dependancies import (
@@ -10,6 +11,8 @@ from .dependancies import (
     LLMService,
     CurlGeneratorService,
 )
+
+from app.models import ExecuteRequestData
 
 app = APIRouter()
 
@@ -44,19 +47,30 @@ async def process_har(
 
 
 @app.post("/api/execute-request")
-async def proxy_request(request_data: dict):
-    url = request_data.get("url")
-    method = request_data.get("method", "GET")
-    headers = request_data.get("headers", {})
-    data = request_data.get("data")
+async def execute_request(request_data: ExecuteRequestData):
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.request(
+                method=request_data.method,
+                url=request_data.url,
+                headers=request_data.headers,
+                content=request_data.data,
+            )
 
-    async with httpx.AsyncClient() as client:
-        response = await client.request(
-            method=method, url=url, headers=headers, data=data
+        headers_dict = dict(response.headers)
+
+        custom_response = Response(
+            content=response.content,
+            status_code=response.status_code,
         )
 
-    return Response(
-        content=response.content,
-        status_code=response.status_code,
-        headers=dict(response.headers),
-    )
+        custom_response.headers["x-proxied-headers"] = json.dumps(headers_dict)
+
+        return custom_response
+
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=500, detail=f"Request error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error executing request: {str(e)}"
+        )
