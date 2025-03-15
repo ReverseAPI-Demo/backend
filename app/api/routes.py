@@ -4,8 +4,10 @@ from .dependancies import (
     validate_har,
     get_har_parser,
     get_llm_service,
+    get_curl_generator,
     HarParserService,
     LLMService,
+    CurlGeneratorService,
 )
 
 app = APIRouter()
@@ -22,6 +24,7 @@ async def process_har(
     api_description: str = Form(...),
     har_parser: HarParserService = Depends(get_har_parser),
     llm_service: LLMService = Depends(get_llm_service),
+    curl_generator: CurlGeneratorService = Depends(get_curl_generator),
 ):
     content = await file.read()
     requests = har_parser.extract_requests(content)
@@ -31,7 +34,12 @@ async def process_har(
 
     matched_request = llm_service.identify_request(requests, api_description)
 
+    if not matched_request:
+        return {"message": "Could not find any requests matching the description."}
+
+    curl_command = curl_generator.generate(matched_request)
+
     return {
         "message": f"Found matching API request",
-        "matched_request": matched_request,
+        "curl_command": curl_command,
     }
