@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, Depends, Form
+from fastapi import APIRouter, UploadFile, Depends, Form, Response
 
 from .dependancies import (
     validate_har,
@@ -39,7 +39,4 @@ async def process_har(
 
     curl_command = curl_generator.generate(matched_request)
 
-    return {
-        "message": f"Found matching API request",
-        "curl_command": curl_command,
-    }
+    return Response(content=curl_command)

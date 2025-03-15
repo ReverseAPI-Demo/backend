@@ -13,6 +13,8 @@ class CurlGeneratorService:
         had issues with it sending the escaped string like: \"date_made\"
         so used shlex to un-escape it.
         """
+
+        print(request)
         if not request:
             raise ValueError("No request data provided")
 
@@ -20,48 +22,78 @@ class CurlGeneratorService:
         method = request.get("method", "GET")
         url = request.get("url", "")
 
+        query_params = request.get("query_params", {})
+
+        # update url with params
+        if query_params and "?" not in url:
+            query_string = "&".join([f"{k}={v}" for k, v in query_params.items()])
+            url = f"{url}?{query_string}"
+
         curl_parts = ["curl"]
 
         if method != "GET":
-            curl_parts += ["-X", method]
+            curl_parts.extend(["-X", method])
 
-        # add the url
-        curl_parts.append(shlex.quote(url))
+        # url (with params)
+        curl_parts.append(f"'{url}'")
 
-        # headers
-        for header_name, header_value in request.get("headers", {}).items():
+        skip_headers = [
+            ":",
+            "content-length",
+            "connection",
+            "keep-alive",
+            "transfer-encoding",
+            "upgrade",
+            "te",
+            "trailer",
+            "sec-ch-ua",
+            "sec-fetch",
+            "priority",
+            "accept-encoding",
+        ]
 
-            header_str = f"{header_name}: {header_value}"
-            curl_parts += ["-H", shlex.quote(header_str)]
+        essential_headers = {}
+        for name, value in request.get("headers", {}).items():
+            # Skip HTTP/2 headers and other problematic ones
+            if any(name.lower().startswith(skip) for skip in skip_headers):
+                continue
 
-        # params
-        query_params = request.get("query_params", {})
-        if query_params and "?" not in url:
-            query_string = "&".join([f"{k}={v}" for k, v in query_params.items()])
-            curl_parts[-1] = shlex.quote(f"{url}?{query_string}")
+            essential_headers[name] = value
+
+        # Always include these important headers if present in original
+        for name in ["accept", "content-type", "authorization", "user-agent"]:
+            if name in request.get("headers", {}):
+                essential_headers[name] = request["headers"][name]
+
+        # Add the filtered headers
+        for name, value in essential_headers.items():
+            curl_parts.append("-H")
+            curl_parts.append(f"'{name}: {value}'")
 
         # post data
         if "post_data" in request:
             post_data = request["post_data"]
-            content_type = post_data.get("mime_type", "")
+            content_type = post_data.get("mime_type", "").lower()
             body_text = post_data.get("text", "")
 
             if body_text:
                 if "json" in content_type.lower():
                     try:
-                        json_data = json.loads(body_text)
-                        body_text = json.dumps(json_data)
-                    except json.JSONDecodeError:
-                        pass
+                        json_obj = json.loads(body_text)
 
-                curl_parts += ["-d", shlex.quote(body_text)]
-
-            elif "post_params" in request:
-                for param_name, param_value in request["post_params"].items():
-                    curl_parts += ["-F", shlex.quote(f"{param_name}={param_value}")]
+                        # using json to grab the actual body and then wrap it in single quotes
+                        formatted_json = json.dumps(json_obj)
+                        curl_parts.append("--data")
+                        curl_parts.append(f"'{formatted_json}'")
+                    except:
+                        curl_parts.append("--data")
+                        curl_parts.append(f"'{body_text}'")
+                else:
+                    curl_parts.append("--data")
+                    curl_parts.append(f"'{body_text}'")
 
         curl_parts.append("-L")
+        curl_parts.append("--compressed")
 
         curl_command = " ".join(curl_parts)
-
         return curl_command
